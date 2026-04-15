@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ISAT Planner</title>
+</head>
+<body>
+
+<h1>ISAT Schedule Planner</h1>
+
+<form method="POST">
+    <label>Starting Year:</label>
+    <input type="number" name="year" value="{{ form_values.year }}" required>
+
+    <br><br>
+
+    <label>Semester:</label>
+    <select name="term">
+        <option value="fall" {% if form_values.term == 'fall' %}selected{% endif %}>Fall</option>
+        <option value="spring" {% if form_values.term == 'spring' %}selected{% endif %}>Spring</option>
+    </select>
+
+    <br><br>
+
+    <label>Sector 1:</label>
+    <select id="sector1" name="sector1">
+        <option value="computing" {% if form_values.sector1 == 'computing' %}selected{% endif %}>Computing</option>
+        <option value="energy" {% if form_values.sector1 == 'energy' %}selected{% endif %}>Energy</option>
+        <option value="environment" {% if form_values.sector1 == 'environment' %}selected{% endif %}>Environment</option>
+        <option value="manufacturing" {% if form_values.sector1 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+        <option value="biotech" {% if form_values.sector1 == 'biotech' %}selected{% endif %}>Biotech</option>
+    </select>
+
+    <br><br>
+
+    <label>Sector 2:</label>
+    <select id="sector2" name="sector2">
+        <option value="computing" {% if form_values.sector2 == 'computing' %}selected{% endif %}>Computing</option>
+        <option value="energy" {% if form_values.sector2 == 'energy' %}selected{% endif %}>Energy</option>
+        <option value="environment" {% if form_values.sector2 == 'environment' %}selected{% endif %}>Environment</option>
+        <option value="manufacturing" {% if form_values.sector2 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+        <option value="biotech" {% if form_values.sector2 == 'biotech' %}selected{% endif %}>Biotech</option>
+    </select>
+
+    <br><br>
+
+    <label>Concentration:</label>
+    <select id="concentration" name="concentration" data-initial="{{ form_values.concentration }}">
+        <option value="environment" {% if form_values.concentration == 'environment' %}selected{% endif %}>Environment</option>
+        <option value="computing" {% if form_values.concentration == 'computing' %}selected{% endif %}>Computing</option>
+        <option value="manufacturing" {% if form_values.concentration == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+        <option value="energy" {% if form_values.concentration == 'energy' %}selected{% endif %}>Energy</option>
+        <option value="biotech" {% if form_values.concentration == 'biotech' %}selected{% endif %}>Biotech</option>
+    </select>
+
+    <br><br>
+
+    <button type="submit">Generate Schedule</button>
+</form>
+
+{% if error_message %}
+    <p>{{ error_message }}</p>
+{% endif %}
+
+{% if schedule %}
+    <h2>Your Schedule:</h2>
+
+    {% for sem in schedule %}
+        <h3>{{ sem.semester }}</h3>
+        <ul>
+            {% for course in sem.courses %}
+                <li>{{ course.code }} ({{ course.credits }} credits)</li>
+            {% endfor %}
+        </ul>
+        <p>Total credits: {{ sem.total_credits }}</p>
+    {% endfor %}
+{% endif %}
+
+<script>
+const sectorLabels = {
+    computing: "Computing",
+    energy: "Energy",
+    environment: "Environment",
+    manufacturing: "Manufacturing",
+    biotech: "Biotech",
+};
+
+const sector1Select = document.getElementById("sector1");
+const sector2Select = document.getElementById("sector2");
+const concentrationSelect = document.getElementById("concentration");
+
+function updateConcentrationOptions() {
+    const s1 = sector1Select.value;
+    const s2 = sector2Select.value;
+    const previous = concentrationSelect.value || concentrationSelect.dataset.initial;
+    const allowed = [...new Set([s1, s2])];
+
+    concentrationSelect.innerHTML = "";
+    for (const value of allowed) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = sectorLabels[value] || value;
+        concentrationSelect.appendChild(option);
+    }
+
+    if (allowed.includes(previous)) {
+        concentrationSelect.value = previous;
+    } else if (allowed.length > 0) {
+        concentrationSelect.value = allowed[0];
+    }
+}
+
+sector1Select.addEventListener("change", updateConcentrationOptions);
+sector2Select.addEventListener("change", updateConcentrationOptions);
+updateConcentrationOptions();
+</script>
+
+</body>
+</html>
