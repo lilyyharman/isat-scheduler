@@ -5,7 +5,7 @@ from pyswip import Prolog
 app = Flask(__name__)
 
 prolog = Prolog()
-prolog.consult("schedule.pl")
+prolog.consult("test.pl")
 
 def build_course_credit_map():
     credit_map = {}
@@ -94,7 +94,7 @@ def index():
             error_message = "Concentration must match one of your selected sectors"
             return render_template("index.html", schedule=schedule, error_message=error_message, form_values=form_values)
 
-        query = f"generate_schedule({sector1}, {sector2}, {concentration}, semester({term}, {year}), 8, S)"
+        query = f"ai_generate_schedule({sector1}, {sector2}, {concentration}, semester({term}, {year}), 8, S)"
 
         result = list(prolog.query(query))
 

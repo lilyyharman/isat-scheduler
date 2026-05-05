@@ -1,79 +1,106 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ISAT Planner</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ISAT Schedule Planner</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<main class="page-shell">
+    <section class="hero-card">
+        <div class="hero-copy">
+            <p class="eyebrow">ISAT scheduler</p>
+            <h1>Plan a cleaner degree path</h1>
+            <p class="hero-text">Generate a semester-by-semester schedule that matches your sectors and concentration.</p>
+        </div>
 
-<h1>ISAT Schedule Planner</h1>
+        <form method="POST" class="planner-form">
+            <div class="field-grid">
+                <div class="field">
+                    <label for="year">Starting year</label>
+                    <input id="year" type="number" name="year" value="{{ form_values.year }}" required min="2024" max="2035" placeholder="2026">
+                </div>
 
-<form method="POST">
-    <label>Starting Year:</label>
-    <input type="number" name="year" value="{{ form_values.year }}" required>
+                <div class="field">
+                    <label for="term">Semester</label>
+                    <select id="term" name="term">
+                        <option value="fall" {% if form_values.term == 'fall' %}selected{% endif %}>Fall</option>
+                        <option value="spring" {% if form_values.term == 'spring' %}selected{% endif %}>Spring</option>
+                    </select>
+                </div>
 
-    <br><br>
+                <div class="field">
+                    <label for="sector1">Sector 1</label>
+                    <select id="sector1" name="sector1">
+                        <option value="computing" {% if form_values.sector1 == 'computing' %}selected{% endif %}>Computing</option>
+                        <option value="energy" {% if form_values.sector1 == 'energy' %}selected{% endif %}>Energy</option>
+                        <option value="environment" {% if form_values.sector1 == 'environment' %}selected{% endif %}>Environment</option>
+                        <option value="manufacturing" {% if form_values.sector1 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+                        <option value="biotech" {% if form_values.sector1 == 'biotech' %}selected{% endif %}>Biotech</option>
+                    </select>
+                </div>
 
-    <label>Semester:</label>
-    <select name="term">
-        <option value="fall" {% if form_values.term == 'fall' %}selected{% endif %}>Fall</option>
-        <option value="spring" {% if form_values.term == 'spring' %}selected{% endif %}>Spring</option>
-    </select>
+                <div class="field">
+                    <label for="sector2">Sector 2</label>
+                    <select id="sector2" name="sector2">
+                        <option value="computing" {% if form_values.sector2 == 'computing' %}selected{% endif %}>Computing</option>
+                        <option value="energy" {% if form_values.sector2 == 'energy' %}selected{% endif %}>Energy</option>
+                        <option value="environment" {% if form_values.sector2 == 'environment' %}selected{% endif %}>Environment</option>
+                        <option value="manufacturing" {% if form_values.sector2 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+                        <option value="biotech" {% if form_values.sector2 == 'biotech' %}selected{% endif %}>Biotech</option>
+                    </select>
+                </div>
 
-    <br><br>
+                <div class="field field-wide">
+                    <label for="concentration">Concentration</label>
+                    <select id="concentration" name="concentration" data-initial="{{ form_values.concentration }}">
+                        <option value="environment" {% if form_values.concentration == 'environment' %}selected{% endif %}>Environment</option>
+                        <option value="computing" {% if form_values.concentration == 'computing' %}selected{% endif %}>Computing</option>
+                        <option value="manufacturing" {% if form_values.concentration == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
+                        <option value="energy" {% if form_values.concentration == 'energy' %}selected{% endif %}>Energy</option>
+                        <option value="biotech" {% if form_values.concentration == 'biotech' %}selected{% endif %}>Biotech</option>
+                    </select>
+                </div>
+            </div>
 
-    <label>Sector 1:</label>
-    <select id="sector1" name="sector1">
-        <option value="computing" {% if form_values.sector1 == 'computing' %}selected{% endif %}>Computing</option>
-        <option value="energy" {% if form_values.sector1 == 'energy' %}selected{% endif %}>Energy</option>
-        <option value="environment" {% if form_values.sector1 == 'environment' %}selected{% endif %}>Environment</option>
-        <option value="manufacturing" {% if form_values.sector1 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
-        <option value="biotech" {% if form_values.sector1 == 'biotech' %}selected{% endif %}>Biotech</option>
-    </select>
+            <button type="submit" class="primary-button">Generate schedule</button>
+        </form>
+    </section>
 
-    <br><br>
+    {% if error_message %}
+        <div class="status-card status-error" role="alert">{{ error_message }}</div>
+    {% endif %}
 
-    <label>Sector 2:</label>
-    <select id="sector2" name="sector2">
-        <option value="computing" {% if form_values.sector2 == 'computing' %}selected{% endif %}>Computing</option>
-        <option value="energy" {% if form_values.sector2 == 'energy' %}selected{% endif %}>Energy</option>
-        <option value="environment" {% if form_values.sector2 == 'environment' %}selected{% endif %}>Environment</option>
-        <option value="manufacturing" {% if form_values.sector2 == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
-        <option value="biotech" {% if form_values.sector2 == 'biotech' %}selected{% endif %}>Biotech</option>
-    </select>
+    {% if schedule %}
+        <section class="results-section">
+            <div class="section-heading">
+                <h2>Your schedule</h2>
+                <p>Review the projected terms and total credit load for each semester.</p>
+            </div>
 
-    <br><br>
+            <div class="schedule-grid">
+                {% for sem in schedule %}
+                    <article class="semester-card">
+                        <div class="semester-header">
+                            <h3>{{ sem.semester }}</h3>
+                            <span class="credit-pill">{{ sem.total_credits }} credits</span>
+                        </div>
 
-    <label>Concentration:</label>
-    <select id="concentration" name="concentration" data-initial="{{ form_values.concentration }}">
-        <option value="environment" {% if form_values.concentration == 'environment' %}selected{% endif %}>Environment</option>
-        <option value="computing" {% if form_values.concentration == 'computing' %}selected{% endif %}>Computing</option>
-        <option value="manufacturing" {% if form_values.concentration == 'manufacturing' %}selected{% endif %}>Manufacturing</option>
-        <option value="energy" {% if form_values.concentration == 'energy' %}selected{% endif %}>Energy</option>
-        <option value="biotech" {% if form_values.concentration == 'biotech' %}selected{% endif %}>Biotech</option>
-    </select>
-
-    <br><br>
-
-    <button type="submit">Generate Schedule</button>
-</form>
-
-{% if error_message %}
-    <p>{{ error_message }}</p>
-{% endif %}
-
-{% if schedule %}
-    <h2>Your Schedule:</h2>
-
-    {% for sem in schedule %}
-        <h3>{{ sem.semester }}</h3>
-        <ul>
-            {% for course in sem.courses %}
-                <li>{{ course.code }} ({{ course.credits }} credits)</li>
-            {% endfor %}
-        </ul>
-        <p>Total credits: {{ sem.total_credits }}</p>
-    {% endfor %}
-{% endif %}
+                        <ul class="course-list">
+                            {% for course in sem.courses %}
+                                <li>
+                                    <span class="course-code">{{ course.code }}</span>
+                                    <span class="course-credits">{{ course.credits }} credits</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </article>
+                {% endfor %}
+            </div>
+        </section>
+    {% endif %}
+</main>
 
 <script>
 const sectorLabels = {

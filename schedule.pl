@@ -1,4 +1,8 @@
 :- use_module(library(lists)).
+:- discontiguous sector_course/2.
+:- discontiguous concentration_course/2.
+:- discontiguous prereq/2.
+:- discontiguous coreq/2.
 % Facts
 % Freshman/Sophomore 
 core_course(isat112, 4).
@@ -247,14 +251,246 @@ subset_of_size(N, [_|T], Rest) :-
     N > 0,
     subset_of_size(N, T, Rest).
 
-% Prerequisite-aware assignment
+% ============================================================================
+% AI PLANNING MODULE: Constraint-aware schedule generation with state-space search
+% ============================================================================
+% Uses forward-chaining search with intelligent course selection heuristics
+% to find valid schedules that respect prerequisites, capacity, and constraints.
+
+% Main entry point: plan schedule using AI search
 assign_courses(Courses, Semesters, Schedule) :-
-    length(Semesters, SemCount),
-    map_courses_with_level(Courses, Courses, Leveled),
-    keysort(Leveled, SortedLeveled),
-    extract_courses(SortedLeveled, OrderedCourses),
-    place_courses(OrderedCourses, SemCount, [], Placement),
+    length(Semesters, _SemCount),
+    analyze_dependencies(Courses, DepMap),
+    plan_search(
+        state(1, [], Courses, DepMap, Semesters),
+        Placement
+    ),
     build_grouped_schedule(Semesters, Placement, Schedule).
+
+% State: state(CurrentSem, ScheduledCourses, RemainingCourses, DependencyMap, AllSemesters)
+% Scheduled format: [Course-Sem, Course-Sem, ...]
+
+% Main search procedure: forward-chaining with backtracking
+plan_search(state(_, Scheduled, [], _, _), Scheduled) :- !.
+plan_search(state(Sem, Scheduled, Remaining, DepMap, Semesters), Placement) :-
+    length(Semesters, SemCount),
+    Sem =< SemCount,
+    % Select best course candidate for current semester using heuristics
+    select_best_course(Remaining, Scheduled, DepMap, Semesters, Sem, SemCount, Course),
+    % Try to schedule course in current semester
+    (   schedule_course(Course, Sem, Scheduled, Semesters, NewScheduled)
+    ->  % Success: continue with remaining courses
+        delete(Remaining, Course, NewRemaining),
+        plan_search(
+            state(Sem, NewScheduled, NewRemaining, DepMap, Semesters),
+            Placement
+        )
+    ;   % Can't fit in this semester: try next semester
+        Sem < SemCount,
+        NextSem is Sem + 1,
+        plan_search(
+            state(NextSem, Scheduled, Remaining, DepMap, Semesters),
+            Placement
+        )
+    ).
+
+% Analyze course dependencies: count how many courses depend on each course
+analyze_dependencies(Courses, DepMap) :-
+    findall(
+        Course-DepCount,
+        (
+            member(Course, Courses),
+            count_dependents(Course, Courses, DepCount)
+        ),
+        DepMap
+    ).
+
+% Count how many courses in the list depend on a given course
+count_dependents(Course, AllCourses, Count) :-
+    findall(
+        Dep,
+        (member(Dep, AllCourses), prereq(Dep, Course)),
+        Dependents
+    ),
+    length(Dependents, Count).
+
+% Select best course to schedule next using heuristics
+% Heuristics prioritize:
+%  1. Courses with many dependents (high in-degree) - unblock others
+%  2. Courses with prerequisites already met
+%  3. Courses critical to the path
+%  4. Later defer capstones and high-level courses
+select_best_course(Remaining, Scheduled, DepMap, Semesters, Sem, SemCount, Selected) :-
+    findall(
+        Score-Course,
+        (
+            member(Course, Remaining),
+            can_schedule_eventually(Course, Remaining, Scheduled),
+            calculate_score(
+                Course, Remaining, Scheduled, DepMap, Semesters, Sem, SemCount, Score
+            )
+        ),
+        Scores
+    ),
+    Scores \= [],  % At least one candidate
+    sort(Scores, SortedScores),
+    reverse(SortedScores, [_-Selected|_]).
+
+% Heuristic score calculation: higher score = higher priority
+calculate_score(Course, Remaining, Scheduled, DepMap, _Semesters, Sem, _SemCount, Score) :-
+    % Component 1: Number of dependents (unblock others)
+    (   member(Course-DepCount, DepMap) -> Dep = DepCount * 80 ; Dep = 0 ),
+    
+    % Component 2: Prerequisites ready (can take now)
+    (   all_prereqs_met(Course, Scheduled) -> Prereq = 60 ; Prereq = 0 ),
+    
+    % Component 3: Required minimum semester check
+    (   min_semester_for_course(Course, Scheduled, MinSem),
+        Sem >= MinSem
+    ->  MinCheck = 40
+    ;   MinCheck = 0
+    ),
+    
+    % Component 4: Is this on critical path (blocks others)
+    (   is_critical_course(Course, Remaining, Scheduled) -> Critical = 50 ; Critical = 0 ),
+    
+    % Component 5: Penalty for taking capstones too early
+    (   capstone(Course, _), Sem < 5 -> Penalty = -30 ; Penalty = 0 ),
+    
+    % Component 6: Bonus for prerequisite courses (foundation)
+    (   is_prerequisite_for_many(Course, Remaining) -> PrerqBonus = 25 ; PrerqBonus = 0 ),
+    
+    Score is Dep + Prereq + MinCheck + Critical + Penalty + PrerqBonus.
+
+% Check if course can eventually be scheduled (prerequisites exist in plan)
+can_schedule_eventually(Course, Remaining, Scheduled) :-
+    forall(
+        prereq(Course, Pre),
+        (member(Pre-_, Scheduled) ; member(Pre, Remaining))
+    ).
+
+% Find minimum semester a course can be taken (after prerequisites)
+min_semester_for_course(Course, Scheduled, MinSem) :-
+    findall(
+        ReqSem,
+        (prereq(Course, Pre), member(Pre-PreSem, Scheduled), ReqSem is PreSem + 1),
+        ReqSems
+    ),
+    capstone_min_sem(Course, CapMin),
+    (   ReqSems = [] -> MaxReq = 1 ; max_list(ReqSems, MaxReq) ),
+    MinSem is max(MaxReq, CapMin).
+
+capstone_min_sem(Course, 5) :- capstone(Course, _), !.
+capstone_min_sem(_, 1).
+
+% Is this course critical (has dependent courses with no alternative path)
+is_critical_course(Course, Remaining, _Scheduled) :-
+    findall(
+        Dep,
+        (
+            member(Dep, Remaining),
+            prereq(Dep, Course),
+            \+ has_alternative_prereq(Dep, Course, Remaining)
+        ),
+        Dependents
+    ),
+    length(Dependents, N), N > 0.
+
+% Check if a course has an alternative way to satisfy prerequisite
+has_alternative_prereq(Course, TargetPre, Remaining) :-
+    prereq(Course, OtherPre),
+    OtherPre \= TargetPre,
+    member(OtherPre, Remaining).
+
+% Is a course a prerequisite for many others
+is_prerequisite_for_many(Course, Remaining) :-
+    findall(
+        Dep,
+        (member(Dep, Remaining), prereq(Dep, Course)),
+        Dependents
+    ),
+    length(Dependents, N), N >= 2.
+
+% Attempt to schedule a course in given semester
+schedule_course(Course, Sem, Scheduled, Semesters, NewScheduled) :-
+    % All prerequisites must be scheduled
+    all_prereqs_met(Course, Scheduled),
+    
+    % Corequisite constraints (same or earlier semester)
+    check_corequisites(Course, Sem, Scheduled),
+    
+    % Capacity constraint (≤18 credits/semester)
+    get_course_credits(Course, Credits),
+    current_semester_load(Sem, Scheduled, CurrentLoad),
+    TotalLoad is CurrentLoad + Credits,
+    TotalLoad =< 18,
+    
+    % Valid semester (not past the last semester)
+    length(Semesters, SemCount), Sem =< SemCount,
+    
+    % Add course to schedule
+    NewScheduled = [Course-Sem | Scheduled].
+
+% Check if all prerequisites are satisfied
+all_prereqs_met(Course, Scheduled) :-
+    forall(prereq(Course, Pre), member(Pre-_, Scheduled)).
+
+% Check corequisite constraints
+check_corequisites(Course, Sem, Scheduled) :-
+    forall(
+        coreq(Course, CoReq),
+        (member(CoReq-CoSem, Scheduled), CoSem =< Sem)
+    ).
+
+% Get current load for a semester
+current_semester_load(Sem, Scheduled, Load) :-
+    findall(
+        Cred,
+        (member(C-Sem, Scheduled), get_course_credits(C, Cred)),
+        Credits
+    ),
+    sum_list(Credits, Load).
+
+% Unified course credit lookup
+get_course_credits(Course, Credits) :-
+    core_course(Course, Credits), !.
+get_course_credits(Course, Credits) :-
+    capstone(Course, Credits), !.
+get_course_credits(Course, Credits) :-
+    sector_course(Course, Credits), number(Credits), !.
+get_course_credits(Course, Credits) :-
+    concentration_course(Course, Credits), number(Credits), !.
+
+
+% ============================================================================
+% SCHEDULE BUILDING & VALIDATION
+% ============================================================================
+
+prereqs_covered(Courses) :-
+    forall(
+        (member(Course, Courses), prereq(Course, Pre)),
+        member(Pre, Courses)
+    ).
+
+build_grouped_schedule(Semesters, Placement, Schedule) :-
+    build_grouped_schedule(Semesters, Placement, 1, Schedule).
+
+build_grouped_schedule([], _, _, []).
+build_grouped_schedule([Sem|RestSems], Placement, Index, [(Sem, CoursesInSem)|Rest]) :-
+    findall(C, member(C-Index, Placement), CoursesInSem),
+    NextIndex is Index + 1,
+    build_grouped_schedule(RestSems, Placement, NextIndex, Rest).
+
+generate_schedule(S1, S2, Conc, Start, N, Schedule) :-
+    valid_concentration_choice(S1, S2, Conc),
+    build_schedule(Start, N, Semesters),
+    choose_courses(S1, S2, Conc, Courses),
+    prereqs_covered(Courses),
+    assign_courses(Courses, Semesters, Schedule).
+
+valid_concentration_choice(S1, S2, Conc) :-
+    Conc = S1 ;
+    Conc = S2.
 
 map_courses_with_level([], _, []).
 map_courses_with_level([C|Cs], AllCourses, [Level-C|Rest]) :-
@@ -321,27 +557,12 @@ select_semester_for_course(Course, Sem, SemCount, Placement, Chosen) :-
     Next is Sem + 1,
     select_semester_for_course(Course, Next, SemCount, Placement, Chosen).
 
-course_credits(Course, Credits) :-
-    core_course(Course, Credits),
-    !.
-course_credits(Course, Credits) :-
-    capstone(Course, Credits),
-    !.
-course_credits(Course, Credits) :-
-    sector_course(Course, Credits),
-    number(Credits),
-    !.
-course_credits(Course, Credits) :-
-    concentration_course(Course, Credits),
-    number(Credits),
-    !.
-
 semester_has_capacity(Sem, Placement, Course) :-
-    course_credits(Course, NewCredits),
+    get_course_credits(Course, NewCredits),
     findall(Credits,
         (
             member(C-Sem, Placement),
-            course_credits(C, Credits)
+            get_course_credits(C, Credits)
         ),
         CreditList
     ),
@@ -359,31 +580,6 @@ coreq_constraint_ok(Course, Sem, Placement) :-
         )
     ).
 
-prereqs_covered(Courses) :-
-    forall(
-        (member(Course, Courses), prereq(Course, Pre)),
-        member(Pre, Courses)
-    ).
-
-build_grouped_schedule(Semesters, Placement, Schedule) :-
-    build_grouped_schedule(Semesters, Placement, 1, Schedule).
-
-build_grouped_schedule([], _, _, []).
-build_grouped_schedule([Sem|RestSems], Placement, Index, [(Sem, CoursesInSem)|Rest]) :-
-    findall(C, member(C-Index, Placement), CoursesInSem),
-    NextIndex is Index + 1,
-    build_grouped_schedule(RestSems, Placement, NextIndex, Rest).
-
-generate_schedule(S1, S2, Conc, Start, N, Schedule) :-
-    valid_concentration_choice(S1, S2, Conc),
-    build_schedule(Start, N, Semesters),
-    choose_courses(S1, S2, Conc, Courses),
-    prereqs_covered(Courses),
-    assign_courses(Courses, Semesters, Schedule).
-
-valid_concentration_choice(S1, S2, Conc) :-
-    Conc = S1 ;
-    Conc = S2.
 
 % Core class Prereqs
 prereq(isat152, isat151).
