@@ -1,9 +1,20 @@
+% ISAT scheduler — single file: catalog, legacy generate_schedule/assign_courses,
+% forward ai_generate_schedule, run_schedule/6, PLUnit tests.
+%
+% Tests: swipl -q -s isat_scheduler.pl -g "run_tests, halt" -t halt
+% Plan:  swipl -q -s isat_scheduler.pl -g "run_schedule(computing,energy,computing,fall,2026,8), halt" -t halt
+% REPL:  ?- [isat_scheduler].  ?- run_schedule(...).  ?- run_tests.
+:- prolog_load_context(directory, Dir),
+   working_directory(_, Dir).
 :- use_module(library(lists)).
+:- use_module(library(plunit)).
+
 :- discontiguous sector_course/2.
 :- discontiguous concentration_course/2.
 :- discontiguous prereq/2.
 :- discontiguous coreq/2.
 % Facts
+:- discontiguous course_credits/2.
 % Freshman/Sophomore 
 core_course(isat112, 4).
 core_course(isat113, 3).
@@ -36,87 +47,87 @@ capstone(isat493, 2).
 
 % Sector Requirements (choose 2)
 % Applied Biotechnology
-sector_course(isat305, 1).
-sector_course(isat350, 3).
-sector_course(isat351, 3).
+credits(isat305, 1).
+credits(isat350, 3).
+credits(isat351, 3).
 
 % Applied Computing
-sector_course(isat340, 3).
-sector_course(isat341, 3).
+credits(isat340, 3).
+credits(isat341, 3).
 
 % Energy
-sector_course(isat301, 1).
-sector_course(isat310, 3).
-sector_course(isat311, 3).
+credits(isat301, 1).
+credits(isat310, 3).
+credits(isat311, 3).
 
 % Environment and Sustainability
-sector_course(isat320, 3).
-sector_course(isat321, 3).
+credits(isat320, 3).
+credits(isat321, 3).
 
 % Industrial and Manufacturing systems
-sector_course(isat303, 1).
-sector_course(isat330, 3).
-sector_course(isat331, 3).
+credits(isat303, 1).
+credits(isat330, 3).
+credits(isat331, 3).
 
 % Concentration Courses
 % Applied Biotechnology Concentration
-concentration_course(isat451, 3).
-concentration_course(isat452, 3).
-concentration_course(isat454, 3).
-concentration_course(isat455, 3).
-concentration_course(isat456, 3).
-concentration_course(isat459, 3).
-concentration_course(isat4885, 3).
+credits(isat451, 3).
+credits(isat452, 3).
+credits(isat454, 3).
+credits(isat455, 3).
+credits(isat456, 3).
+credits(isat459, 3).
+credits(isat485, 3).
 
 % Applied Computing Concentration
-concentration_course(isat440, 3).
-concentration_course(isat441, 3).
-concentration_course(isat445, 3).
-concentration_course(isat447, 3).
-concentration_course(isat449, 3).
+credits(isat440, 3).
+credits(isat441, 3).
+credits(isat445, 3).
+credits(isat447, 3).
+credits(isat449, 3).
 
 % Energy Concentration
 % Required Energy Concentration Courses: 6 Credit Hours
-concentration_course(isat411, 3).
-concentration_course(isat413, 3).
+credits(isat411, 3).
+credits(isat413, 3).
 
 % Energy Concentration Electives: 6 Credit Hours
-concentration_course(isat410, 3).
-concentration_course(isat414, 3).
-concentration_course(isat416, 3).
+credits(isat410, 3).
+credits(isat414, 3).
+credits(isat416, 3).
 
 % Environment and Sustainability Concentration
-concentration_course(isat420, 3).
-concentration_course(isat421, 3).
-concentration_course(isat422, 3).
-concentration_course(isat423, 3).
-concentration_course(isat424, 3).
-concentration_course(isat425, 3).
-concentration_course(isat426, 3).
-concentration_course(isat427, 3).
-concentration_course(isat428, 3).
-concentration_course(isat429, 3).
-concentration_course(isat473, 4).
-concentration_course(isat474, 3).
+credits(isat420, 3).
+credits(isat421, 3).
+credits(isat422, 3).
+credits(isat423, 3).
+credits(isat424, 3).
+credits(isat425, 3).
+credits(isat426, 3).
+credits(isat427, 3).
+credits(isat428, 3).
+credits(isat429, 3).
+credits(isat473, 4).
+credits(isat474, 3).
 
 % Industrial and Manufacturing Systems Concentration
-concentration_course(isat430, 3).
-concentration_course(isat431, 3).
-concentration_course(isat432, 3).
-concentration_course(isat433, 3).
-concentration_course(isat434, 3).
-concentration_course(isat435, 3).
-concentration_course(isat437, 3).
+credits(isat430, 3).
+credits(isat431, 3).
+credits(isat432, 3).
+credits(isat433, 3).
+credits(isat434, 3).
+credits(isat435, 3).
+credits(isat437, 3).
 
 % Public Interest Technology and Science Concentration
-concentration_course(isat411, 3).
-concentration_course(isat421, 3).
-concentration_course(isat440, 3).
-concentration_course(isat455, 3).
-concentration_course(isat456, 3).
-concentration_course(isat485, 3).
-concentration_course(isat483, 3).
-concentration_course(isat487, 3).
+credits(isat411, 3).
+credits(isat421, 3).
+credits(isat440, 3).
+credits(isat455, 3).
+credits(isat456, 3).
+credits(isat485, 3).
+credits(isat483, 3).
+credits(isat487, 3).
 
 % Link courses to Sectors
 % Applied Biotechnology
@@ -285,7 +296,8 @@ plan_search(state(Sem, Scheduled, Remaining, DepMap, Semesters), Placement) :-
             state(Sem, NewScheduled, NewRemaining, DepMap, Semesters),
             Placement
         )
-    ;   % Can't fit in this semester: try next semester
+    ;   
+    % Cant fit in this semester: try next semester
         Sem < SemCount,
         NextSem is Sem + 1,
         plan_search(
@@ -450,6 +462,76 @@ current_semester_load(Sem, Scheduled, Load) :-
         Credits
     ),
     sum_list(Credits, Load).
++% ============================================================================
+% FORWARD PLANNING: Simple semester-by-semester schedule generation
+% ============================================================================
+
+% Main entry point: forward plan through each semester
+assign_courses(Courses, Semesters, Schedule) :-
+    forward_plan_semesters(Semesters, Courses, 1, [], Schedule).
+
+% Base case: no more semesters
+forward_plan_semesters([], _, _, _, []).
+
+% Recursive case: plan for each semester
+forward_plan_semesters([Sem|RestSems], RemainingCourses, SemNum, TakenSoFar, [(Sem, SelectedCourses)|RestSchedule]) :-
+    % Find courses eligible to take this semester
+    findall(
+        Course,
+        (
+            member(Course, RemainingCourses),
+            % Prerequisites must be satisfied (all taken in previous semesters)
+            forall(prereq(Course, Pre), member(Pre, TakenSoFar)),
+            % Corequisites must be available (will be in this or later semester)
+            forall(coreq(Course, CoReq), member(CoReq, RemainingCourses))
+        ),
+        EligibleCourses
+    ),
+    
+    % Sort courses by priority (prerequisite courses first, then others)
+    sort_courses_by_priority(EligibleCourses, SortedCourses),
+    
+    % Select courses that fit in credit limit
+    select_courses_for_semester(SortedCourses, 18, [], SelectedCourses),
+    
+    % Update taken and remaining courses
+    append(TakenSoFar, SelectedCourses, NewTaken),
+    subtract(RemainingCourses, SelectedCourses, NewRemaining),
+    
+    % Continue to next semester
+    NextSem is SemNum + 1,
+    forward_plan_semesters(RestSems, NewRemaining, NextSem, NewTaken, RestSchedule).
+
+% Sort courses: prerequisite courses first, then others
+sort_courses_by_priority(Courses, Sorted) :-
+    partition_courses(Courses, PrereqCourses, OtherCourses),
+    append(PrereqCourses, OtherCourses, Sorted).
+
+% Partition courses into prerequisites and others
+partition_courses(Courses, Prereqs, Others) :-
+    partition(is_prerequisite_course, Courses, Prereqs, Others).
+
+% Check if a course is a prerequisite (has no prerequisites itself)
+is_prerequisite_course(Course) :-
+    \+ prereq(Course, _).
+
+% Select courses for a semester that fit in credit limit
+select_courses_for_semester([], _, _, []).
+select_courses_for_semester([Course|Rest], CreditsLeft, _Taken, [Course|Selected]) :-
+    course_credits(Course, Credits),
+    Credits =< CreditsLeft,
+    NewCreditsLeft is CreditsLeft - Credits,
+    select_courses_for_semester(Rest, NewCreditsLeft, [Course], Selected).
+select_courses_for_semester([_Course|Rest], CreditsLeft, Taken, Selected) :-
+    select_courses_for_semester(Rest, CreditsLeft, Taken, Selected).
+
+% Get course credits
+course_credits(Course, Credits) :-
+    core_course(Course, Credits), !.
+course_credits(Course, Credits) :-
+    capstone(Course, Credits), !.
+course_credits(Course, Credits) :-
+    credits(Course, Credits), number(Credits), !.
 
 % Unified course credit lookup
 get_course_credits(Course, Credits) :-
@@ -457,9 +539,7 @@ get_course_credits(Course, Credits) :-
 get_course_credits(Course, Credits) :-
     capstone(Course, Credits), !.
 get_course_credits(Course, Credits) :-
-    sector_course(Course, Credits), number(Credits), !.
-get_course_credits(Course, Credits) :-
-    concentration_course(Course, Credits), number(Credits), !.
+    credits(Course, Credits), number(Credits), !.
 
 
 % ============================================================================
@@ -482,11 +562,7 @@ build_grouped_schedule([Sem|RestSems], Placement, Index, [(Sem, CoursesInSem)|Re
     build_grouped_schedule(RestSems, Placement, NextIndex, Rest).
 
 generate_schedule(S1, S2, Conc, Start, N, Schedule) :-
-    valid_concentration_choice(S1, S2, Conc),
-    build_schedule(Start, N, Semesters),
-    choose_courses(S1, S2, Conc, Courses),
-    prereqs_covered(Courses),
-    assign_courses(Courses, Semesters, Schedule).
+    ai_generate_schedule(S1, S2, Conc, Start, N, Schedule).
 
 valid_concentration_choice(S1, S2, Conc) :-
     Conc = S1 ;
@@ -738,3 +814,150 @@ same_or_before(semester(spring, Y), semester(fall, Y)).
 later_semester(Sem, List, Total) :-
     nth1(Index, List, Sem),
     Index > Total // 4.
+% ========= Forward planner (was isat_planner.pl; all in user) =========
+
+goals_for_degree(S1, S2, Conc, Goals) :-
+    choose_courses(S1, S2, Conc, G0),
+    sort(G0, Goals).
+
+course_credits(Course, Credits) :- get_course_credits(Course, Credits).
+
+%% Forward planning: semester order; a course is added only when all prereqs and
+%% coreqs already appear in prior terms or earlier in this term. ≤18 cr/term;
+%% capstones from semester index ≥5. choose_courses + prereqs_covered/1 fix the
+%% degree set; unplaced remainder → failure (backtrack to another subset).
+
+ai_generate_schedule(S1, S2, Conc, Start, N, Schedule) :-
+    valid_concentration_choice(S1, S2, Conc),
+    build_schedule(Start, N, Semesters),
+    choose_courses(S1, S2, Conc, Goals0),
+    sort(Goals0, Goals),
+    prereqs_covered(Goals),
+    length(Semesters, TotalSems),
+    forward_plan(Semesters, Goals, [], 1, TotalSems, Schedule),
+    !.
+
+trim_trailing_empty_semesters(List, Trimmed) :-
+    reverse(List, Rev),
+    trim_leading_empty_pairs_rev(Rev, RevTrim),
+    reverse(RevTrim, Trimmed).
+
+trim_leading_empty_pairs_rev([], []).
+trim_leading_empty_pairs_rev([(_Sem, []) | Rest], Out) :-
+    trim_leading_empty_pairs_rev(Rest, Out).
+trim_leading_empty_pairs_rev([(Sem, C) | Rest], [(Sem, C) | Rest]) :-
+    C \= [].
+
+forward_plan([], [], _, _, _, []).
+forward_plan([], Remain, _, _, _, _) :- Remain \= [], !, fail.
+
+forward_plan([Sem | RestSems], Remaining, Taken0, SemIdx, TotalSems, [(Sem, Courses) | PlanRest]) :-
+    fill_semester(Remaining, Taken0, SemIdx, TotalSems, Courses, Remaining1),
+    \+ stuck_semester(Courses, Remaining),
+    append(Taken0, Courses, Taken1),
+    SemIdx1 is SemIdx + 1,
+    forward_plan(RestSems, Remaining1, Taken1, SemIdx1, TotalSems, PlanRest).
+
+stuck_semester([], Rem) :- Rem \= [].
+
+fill_semester(Rem, Taken, SemIdx, TotalSems, Courses, RemOut) :-
+    saturate_semester(Rem, Taken, [], 18, SemIdx, TotalSems, Rev),
+    reverse(Rev, Courses),
+    subtract(Rem, Courses, RemOut).
+
+saturate_semester(Rem, Taken, Acc, CredLeft, SemIdx, TotalSems, Out) :-
+    ( member(C, Rem),
+      \+ member(C, Acc),
+      can_take_now(C, Taken, Acc, SemIdx, TotalSems),
+      course_credits(C, Cr),
+      Cr =< CredLeft,
+      Cred1 is CredLeft - Cr,
+      subtract(Rem, [C], Rem1),
+      saturate_semester(Rem1, Taken, [C | Acc], Cred1, SemIdx, TotalSems, Out)
+    ; Out = Acc
+    ).
+
+can_take_now(C, Taken, SemSoFar, SemIdx, TotalSems) :-
+    % Prerequisites must be completed in prior semesters only.
+    forall(prereq(C, Pre), member(Pre, Taken)),
+    % Corequisites may be completed earlier or in the same semester.
+    append(Taken, SemSoFar, BeforeOrSame),
+    forall(coreq(C, Co), member(Co, BeforeOrSame)),
+    (
+        capstone(C, _)
+    ->  capstone_window_start(TotalSems, StartIdx),
+        SemIdx >= StartIdx,
+        capstone_count(SemSoFar, Count),
+        Count =:= 0
+    ;   true
+    ).
+
+capstone_window_start(TotalSems, StartIdx) :-
+    StartIdx is max(1, TotalSems - 3).
+
+capstone_count(Courses, Count) :-
+    include(is_capstone_course, Courses, Caps),
+    length(Caps, Count).
+
+is_capstone_course(Course) :-
+    capstone(Course, _).
+
+% ========= run_schedule =========
+
+%% run_schedule(+Sector1, +Sector2, +Concentration, +Term, +Year, +NumSemesters)
+run_schedule(S1, S2, Conc, Term, Year, N) :-
+    ai_generate_schedule(S1, S2, Conc, semester(Term, Year), N, Plan),
+    format('~n--- ISAT schedule (ai_generate_schedule) ---~n', []),
+    format('Start: ~w ~w | ~w + ~w | conc: ~w~n~n', [Term, Year, S1, S2, Conc]),
+    forall(
+        member((semester(T, Y), Courses), Plan),
+        format('~w ~w: ~w~n', [T, Y, Courses])
+    ).
+
+% ========= PLUnit tests =========
+
+
+% One solution — forward planner may finish before term N; require full goal set
+% scheduled and ≤18 cr on every non-empty semester.
+schedule_ok(S1, S2, Conc, Term, Year, N) :-
+    once((
+        ai_generate_schedule(S1, S2, Conc, semester(Term, Year), N, Plan),
+        goals_for_degree(S1, S2, Conc, Goals),
+        findall(C, (member((_, Cs), Plan), member(C, Cs)), Scheduled),
+        msort(Scheduled, A),
+        msort(Goals, B),
+        A == B,
+        forall(
+            member((_Sem, Courses), Plan),
+            ( Courses = [] ; (semester_load(Courses, Tot), Tot =< 18) )
+        )
+    )).
+
+semester_load(Courses, Total) :-
+    findall(Cr, (member(C, Courses), course_credits(C, Cr)), Crs),
+    sum_list(Crs, Total).
+
+:- begin_tests(ai_generate_schedule).
+
+test(computing_energy_computing_fall_2026_8) :-
+    schedule_ok(computing, energy, computing, fall, 2026, 8).
+
+test(computing_energy_energy_conc) :-
+    schedule_ok(computing, energy, energy, fall, 2026, 8).
+
+test(biotech_environment_biotech) :-
+    schedule_ok(biotech, environment, biotech, fall, 2026, 8).
+
+test(manufacturing_computing_computing) :-
+    schedule_ok(manufacturing, computing, computing, fall, 2026, 8).
+
+test(spring_start_2027) :-
+    schedule_ok(energy, environment, environment, spring, 2027, 8).
+
+test(six_semester_plan) :-
+    schedule_ok(computing, energy, computing, fall, 2026, 6).
+
+test(wrong_concentration_not_in_sectors, [fail]) :-
+    ai_generate_schedule(computing, energy, biotech, semester(fall, 2026), 8, _).
+
+:- end_tests(ai_generate_schedule).

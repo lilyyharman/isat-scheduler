@@ -5,15 +5,14 @@ from pyswip import Prolog
 app = Flask(__name__)
 
 prolog = Prolog()
-prolog.consult("test.pl")
+prolog.consult("schedule.pl")
 
 def build_course_credit_map():
     credit_map = {}
     for query in [
         "core_course(C, Cr)",
         "capstone(C, Cr)",
-        "sector_course(C, Cr)",
-        "concentration_course(C, Cr)",
+        "credits(C, Cr)",
     ]:
         for row in prolog.query(query):
             course = str(row["C"]).strip()
@@ -28,7 +27,7 @@ def format_schedule(raw_schedule):
     formatted = []
 
     for item in raw_schedule:
-        text = item.strip().lstrip(",")
+        text = str(item).strip().lstrip(",")
 
         sem_match = re.search(r"semester\((\w+),\s*(\d+)\)", text)
         courses_match = re.search(r"\[(.*?)\]", text)
@@ -57,6 +56,33 @@ def format_schedule(raw_schedule):
         })
 
     return formatted
+
+
+def next_semester(term, year):
+    if term == "fall":
+        return "spring", year + 1
+    return "fall", year
+
+
+def normalize_schedule_length(schedule, start_term, start_year, total_semesters=8):
+    by_name = {item["semester"]: item for item in schedule}
+    normalized = []
+    term = start_term.lower()
+    year = int(start_year)
+
+    for _ in range(total_semesters):
+        label = f"{term.capitalize()} {year}"
+        if label in by_name:
+            normalized.append(by_name[label])
+        else:
+            normalized.append({
+                "semester": label,
+                "courses": [],
+                "total_credits": 0,
+            })
+        term, year = next_semester(term, year)
+
+    return normalized
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -94,13 +120,14 @@ def index():
             error_message = "Concentration must match one of your selected sectors"
             return render_template("index.html", schedule=schedule, error_message=error_message, form_values=form_values)
 
-        query = f"ai_generate_schedule({sector1}, {sector2}, {concentration}, semester({term}, {year}), 8, S)"
+        query = f"generate_schedule({sector1}, {sector2}, {concentration}, semester({term}, {year}), 8, S)"
 
         result = list(prolog.query(query))
 
         if result:
             raw_schedule = result[0]["S"]
             schedule = format_schedule(raw_schedule)
+            schedule = normalize_schedule_length(schedule, term, year, 8)
         else:
             error_message = "No valid schedule found for the selected options."
 
